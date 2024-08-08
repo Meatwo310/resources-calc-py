@@ -1,7 +1,7 @@
 #!.venv/bin/python
 
 import math
-from typing import Self
+from typing import NamedTuple, Self
 
 class Item:
     """アイテム名と個数を表すクラス
@@ -15,6 +15,18 @@ class Item:
         """
         self.name = name
         self.quantity = quantity
+    
+    def __str__(self) -> str:
+        """アイテムを文字列として表現する
+
+        Returns:
+            str: アイテムを表現する文字列
+
+        Examples:
+            >>> str(Item("Wood Plank", 4))
+            'Wood Plank x4'
+        """
+        return f"{self.name} x{self.quantity}"
 
 class Recipe:
     """アイテムとそれに必要な材料、過程で生じる副産物を表すクラス
@@ -99,9 +111,31 @@ class IngredientTree:
         """
         self.item = item
         self.actual_quantity = item.quantity
+        self.recipes = recipes
         self.children: list[IngredientTree] = []
         self.byproducts: list[Item] = []
-        self.calculate_children(recipes)
+        self.calculate_children()
+    
+    @staticmethod
+    def get_craft_times(min_quantity: int, batch_size: int) -> int:
+        """最小の個数と一度に作られる個数から必要なクラフト回数を計算する
+
+        Args:
+            min_quantity (int): 要求する最小のアイテム数
+            batch_size (int): 一度に作成されるアイテム数
+
+        Returns:
+            int: 必要なクラフト回数
+        
+        Examples:
+            >>> IngredientTree.get_craft_times(3, 4)
+            1
+            >>> IngredientTree.get_craft_times(4, 4)
+            1
+            >>> IngredientTree.get_craft_times(5, 4)
+            2
+        """
+        return math.ceil(min_quantity / batch_size)
     
     @staticmethod
     def get_required_quantity(min_quantity: int, batch_size: int) -> int:
@@ -122,18 +156,15 @@ class IngredientTree:
             >>> IngredientTree.get_required_quantity(5, 4)
             8
         """
-        return math.ceil(min_quantity / batch_size) * batch_size
+        return IngredientTree.get_craft_times(min_quantity, batch_size) * batch_size
     
-    def calculate_children(self, recipes: RecipeGroup) -> Self:
+    def calculate_children(self) -> Self:
         """自身のアイテムの作成に必要な材料を再帰的に計算し、子要素に設定する
 
-        `self.item`を`recipes`から参照し、必要な材料を子要素に設定する。
-        子要素の設定時、`calculate_children()`が自動的に呼び出されることで、再帰的な計算となる。
+        `self.item`を`self.recipes`から参照し、必要な材料を子要素に設定する。
+        子要素の設定時、このメソッドは自動的に呼び出されるため、再帰的な計算となる。
         また、実際に作成されるアイテム数は`IngredientTree.get_required_quantity()`を用いて自動的に調整され、計算に用いられる。
         副産物は計算において完全に無視されるが、`self.byproducts`に集計される。
-
-        Args:
-            recipes (RecipeGroup): 計算に用いられるレシピグループ
 
         Returns:
             Self: 自身のインスタンス
@@ -152,7 +183,7 @@ class IngredientTree:
             \\-Wood Plank x3 (+1)
               \\-Log x1
         """
-        recipe = recipes.get_recipe(self.item.name)
+        recipe = self.recipes.get_recipe(self.item.name)
         
         if not recipe:
             self.children = []
@@ -163,9 +194,8 @@ class IngredientTree:
         self.children = [
             IngredientTree(
                 Item(ingredient.name, ingredient.quantity * self.actual_quantity // recipe.main_product.quantity),
-                recipes,
-            )
-            for ingredient in recipe.ingredients
+                self.recipes,
+            ) for ingredient in recipe.ingredients
         ]
         self.byproducts = [byproduct for byproduct in recipe.byproducts]
         
@@ -207,6 +237,84 @@ class IngredientTree:
 
         return result
 
+class RecipeSimulator:
+    """レシピを用いた加工をシミュレーションするクラス
+    """
+    class CostsResult(NamedTuple):
+        total_costs: list[Item]
+        excess_items: list[Item]
+        intermediate_history: list[Item]
+    
+    @staticmethod
+    def get_total_costs(recipes: RecipeGroup, items: Item | list[Item]) -> CostsResult:
+        """アイテムの加工をシミュレーションし、総コストを計算する
+
+        Args:
+            recipes (RecipeGroup): シミュレーションに用いるレシピグループ
+            items (Item|list[Item]): シミュレーション対象のアイテムまたはアイテムのリスト
+
+        Returns:
+            CostsResult: 総コスト、余剰品、中間素材履歴を含む`CostsResult`インスタンス
+        """
+        
+        total_costs: dict[str, Item] = {}
+        excess_items: dict[str, Item] = {}
+        intermediate_history: dict[str, Item] = {}
+        processing_queue: dict[str, Item] = {}
+        
+        if isinstance(items, Item):
+            items = [items]
+        
+        # 要求されたアイテムをすべて加工キューに追加
+        for item in items:
+            processing_queue.setdefault(item.name, Item(item.name, 0)).quantity += item.quantity
+        
+        # 加工キューが空になるまで続ける
+        while processing_queue:
+            _, item = processing_queue.popitem()
+            recipe = recipes.get_recipe(item.name)
+            
+            # レシピが存在しない場合、総コストプールに追加し次のアイテムへ
+            if not recipe:
+                total_costs.setdefault(item.name, Item(item.name, 0)).quantity += item.quantity
+                continue
+            
+            # レシピが存在する場合、まずは余剰品プールから消費可能なだけ消費
+            # このとき、一度に消費されるのは、レシピの主産物の個数個ずつとなる
+            if item.name in excess_items:
+                extra_item = excess_items[item.name]
+                while recipe.main_product.quantity <= extra_item.quantity and recipe.main_product.quantity <= item.quantity:
+                    extra_item.quantity -= recipe.main_product.quantity
+                    item.quantity -= recipe.main_product.quantity
+            
+            # 次に、必要な材料を計算し、加工キューに追加
+            actual_quantity = IngredientTree.get_required_quantity(item.quantity, recipe.main_product.quantity)
+            process_times = actual_quantity // recipe.main_product.quantity
+            for ingredient in recipe.ingredients:
+                processing_queue.setdefault(ingredient.name, Item(ingredient.name, 0)).quantity += ingredient.quantity * process_times
+            
+            # 同様に副産物を余剰品プールに追加
+            for byproduct in recipe.byproducts:
+                excess_items.setdefault(byproduct.name, Item(byproduct.name, 0)).quantity += byproduct.quantity * process_times
+            
+            # もともと要求されていたアイテム分を中間素材履歴に追加
+            intermediate_history.setdefault(item.name, Item(item.name, 0)).quantity += item.quantity
+            
+            # 余分に作成されたアイテム分を余剰品プールに追加
+            if item.quantity > actual_quantity:
+                excess_items.setdefault(item.name, Item(item.name, 0)).quantity += item.quantity - actual_quantity
+        
+        # 総コストプールと余剰品プール、中間素材履歴をそれぞれリストに変換して返す
+        total_costs_list = sorted(list(total_costs.values()), key=lambda x: x.quantity, reverse=True)
+        excess_items_list = sorted(list(excess_items.values()), key=lambda x: x.quantity, reverse=True)
+        intermediate_history_list = list(intermediate_history.values())
+        return RecipeSimulator.CostsResult(
+            total_costs_list,
+            excess_items_list,
+            intermediate_history_list,
+        )
+
+
 if __name__ == "__main__":
     recipes = RecipeGroup([
         Recipe(Item("Wood Plank", 4), [Item("Log")]),
@@ -217,4 +325,21 @@ if __name__ == "__main__":
         Recipe(Item("Sugar"), [Item("Sugar Cane")]),
     ])
 
-    print(IngredientTree(Item("Wooden Pickaxe", 1), recipes))
+    item = Item("Cake", 1)
+    tree = IngredientTree(item, recipes)
+    print(tree)
+    result = RecipeSimulator.get_total_costs(recipes, item)
+    print("総コスト:", ", ".join([str(item) for item in result.total_costs]))
+    print("余り物:", ", ".join([str(item) for item in result.excess_items]) or "-")
+    print("中間素材履歴:", ", ".join([str(item) for item in result.intermediate_history]))
+    
+    print()
+    
+    item = Item("Wooden Pickaxe", 11)
+    tree = IngredientTree(item, recipes)
+    print(tree)
+    result = RecipeSimulator.get_total_costs(recipes, item)
+    print("総コスト:", ", ".join([str(item) for item in result.total_costs]))
+    print("余り物:", ", ".join([str(item) for item in result.excess_items]) or "-")
+    print("中間素材履歴:", ", ".join([str(item) for item in result.intermediate_history]))
+    
