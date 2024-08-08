@@ -249,12 +249,17 @@ class RecipeSimulator:
     def get_total_costs(recipes: RecipeGroup, items: Item | list[Item]) -> CostsResult:
         """アイテムの加工をシミュレーションし、総コストを計算する
 
+        レシピを参照しながら4種類の内部的なプールを用いて、
+        アイテム加工のシミュレーションを行い、総コスト、余剰品、中間素材履歴を返す。
+        計算はレシピの主産物が最小になるよう行われる。
+        副産物も計算に使用されるが、主産物と違い最小になるよう調整されるわけではない。
+
         Args:
             recipes (RecipeGroup): シミュレーションに用いるレシピグループ
             items (Item|list[Item]): シミュレーション対象のアイテムまたはアイテムのリスト
 
         Returns:
-            CostsResult: 総コスト、余剰品、中間素材履歴を含む`CostsResult`インスタンス
+            CostsResult: 総コスト`total_costs`、余剰品`excess_items`、中間素材履歴`intermediate_history`を含む`CostsResult`インスタンス
         """
         
         total_costs: dict[str, Item] = {}
@@ -341,4 +346,4 @@ if __name__ == "__main__":
     calc(recipes, Item("Wooden Pickaxe", 1))
     calc(recipes, Item("Wooden Pickaxe", 2))
     calc(recipes, Item("Wooden Pickaxe", 11))
-    
+
