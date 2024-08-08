@@ -301,8 +301,8 @@ class RecipeSimulator:
             intermediate_history.setdefault(item.name, Item(item.name, 0)).quantity += item.quantity
             
             # 余分に作成されたアイテム分を余剰品プールに追加
-            if item.quantity > actual_quantity:
-                excess_items.setdefault(item.name, Item(item.name, 0)).quantity += item.quantity - actual_quantity
+            if actual_quantity > item.quantity:
+                excess_items.setdefault(item.name, Item(item.name, 0)).quantity += actual_quantity - item.quantity
         
         # 総コストプールと余剰品プール、中間素材履歴をそれぞれリストに変換して返す
         total_costs_list = sorted(list(total_costs.values()), key=lambda x: x.quantity, reverse=True)
@@ -324,22 +324,21 @@ if __name__ == "__main__":
         Recipe(Item("Bucket"), [Item("Iron Ingot", 3)]),
         Recipe(Item("Sugar"), [Item("Sugar Cane")]),
     ])
+    
+    def calc(recipes: RecipeGroup, item: Item):
+        tree = IngredientTree(item, recipes)
+        print(tree)
+        result = RecipeSimulator.get_total_costs(recipes, item)
+        print("総コスト:", ", ".join([str(item) for item in result.total_costs]))
+        print("余り物:", ", ".join([str(item) for item in result.excess_items]) or "-")
+        print("中間素材履歴:", ", ".join([str(item) for item in result.intermediate_history]))
 
-    item = Item("Cake", 1)
-    tree = IngredientTree(item, recipes)
-    print(tree)
-    result = RecipeSimulator.get_total_costs(recipes, item)
-    print("総コスト:", ", ".join([str(item) for item in result.total_costs]))
-    print("余り物:", ", ".join([str(item) for item in result.excess_items]) or "-")
-    print("中間素材履歴:", ", ".join([str(item) for item in result.intermediate_history]))
+    calc(recipes, Item("Cake", 1))
+    calc(recipes, Item("Cake", 5))
     
     print()
     
-    item = Item("Wooden Pickaxe", 11)
-    tree = IngredientTree(item, recipes)
-    print(tree)
-    result = RecipeSimulator.get_total_costs(recipes, item)
-    print("総コスト:", ", ".join([str(item) for item in result.total_costs]))
-    print("余り物:", ", ".join([str(item) for item in result.excess_items]) or "-")
-    print("中間素材履歴:", ", ".join([str(item) for item in result.intermediate_history]))
+    calc(recipes, Item("Wooden Pickaxe", 1))
+    calc(recipes, Item("Wooden Pickaxe", 2))
+    calc(recipes, Item("Wooden Pickaxe", 11))
     
