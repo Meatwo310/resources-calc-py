@@ -198,12 +198,7 @@ class IngredientTree:
             result += f" (+{self.actual_quantity - self.item.quantity})"
 
         if self.byproducts:
-            byproducts_str = " + " + " + ".join(
-                [
-                    f"{byproduct.name} x{byproduct.quantity}"
-                    for byproduct in self.byproducts
-                ]
-            )
+            byproducts_str = " + " + " + ".join([f"{byproduct.name} x{byproduct.quantity}" for byproduct in self.byproducts])
             result += f" [{byproducts_str}]"
 
         new_prefix = prefix + ("  " if is_last else "| ") if level > 0 else ""
