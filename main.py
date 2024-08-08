@@ -150,7 +150,7 @@ class IngredientTree:
             | \\-Wood Plank x2 (+2)
             |   \\-Log x1
             \\-Wood Plank x3 (+1)
-                \\-Log x1
+              \\-Log x1
         """
         recipe = recipes.get_recipe(self.item.name)
         
