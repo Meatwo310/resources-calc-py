@@ -22,3 +22,8 @@ class Item:
             'Wood Plank x4'
         """
         return f"{self.name} x{self.quantity}"
+    
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Item):
+            return NotImplemented
+        return self.name == other.name and self.quantity == other.quantity
