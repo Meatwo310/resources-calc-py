@@ -1,1 +1,1 @@
-.venv/bin/python -m unittest discover -s calc/tests
+python -m unittest discover -s calc/tests
